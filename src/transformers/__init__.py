@@ -30,6 +30,10 @@ from .benchmark_utils import (
     bytes_to_human_readable,
     start_memory_tracing,
     stop_memory_tracing,
+    StopwatchMeter,
+    CancelBWDException,
+    CancelOptimException,
+    CancelTrainException,
 )
 
 # Configurations

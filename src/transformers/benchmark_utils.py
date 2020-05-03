@@ -8,6 +8,7 @@ import linecache
 import logging
 import os
 import sys
+import time
 from collections import defaultdict
 from typing import Iterable, List, NamedTuple, Optional, Union
 
@@ -339,3 +340,30 @@ def bytes_to_human_readable(memory_amount: int) -> str:
             return "{:.3f}{}".format(memory_amount, unit)
         memory_amount /= 1024.0
     return "{:.3f}TB".format(memory_amount)
+
+
+class StopwatchMeter():
+    """ Computes the sum/avg duration of some event in seconds """
+    def __init__(self):
+        self.sum = 0
+        self.n = 0
+        self.start_time = None
+
+    def start(self):
+        self.start_time = time.perf_counter()
+
+    def stop(self, n=1):
+        if self.start_time is not None:
+            delta = time.perf_counter() - self.start_time
+        self.sum += delta
+        self.n += n
+
+    def reset(self):
+        self.sum = 0  # cumulative time during which stopwatch was active
+        self.n = 0  # total n across all start/stop
+        self.start()
+
+
+class CancelBWDException(Exception): pass
+class CancelOptimException(Exception): pass
+class CancelTrainException(Exception): pass

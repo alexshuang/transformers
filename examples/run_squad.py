@@ -45,6 +45,7 @@ from transformers.data.metrics.squad_metrics import (
     squad_evaluate,
 )
 from transformers.data.processors.squad import SquadResult, SquadV1Processor, SquadV2Processor
+from transformers.benchmark_utils import StopwatchMeter, CancelBWDException, CancelOptimException, CancelTrainException
 
 
 try:
@@ -60,6 +61,7 @@ MODEL_TYPES = tuple(conf.model_type for conf in MODEL_CONFIG_CLASSES)
 
 ALL_MODELS = sum((tuple(conf.pretrained_config_archive_map.keys()) for conf in MODEL_CONFIG_CLASSES), (),)
 
+train_meter = None
 
 def set_seed(args):
     random.seed(args.seed)
@@ -201,7 +203,11 @@ def train(args, train_dataset, model, tokenizer):
                         {"langs": (torch.ones(batch[0].shape, dtype=torch.int64) * args.lang_id).to(args.device)}
                     )
 
+            train_meter.start()
             outputs = model(**inputs)
+
+            if args.one_iteration and args.no_bwd: raise CancelBWDException
+
             # model outputs are always tuple in transformers (see doc)
             loss = outputs[0]
 
@@ -216,6 +222,8 @@ def train(args, train_dataset, model, tokenizer):
             else:
                 loss.backward()
 
+            if args.one_iteration and args.no_optim: raise CancelOptimException
+
             tr_loss += loss.item()
             if (step + 1) % args.gradient_accumulation_steps == 0:
                 if args.fp16:
@@ -225,6 +233,7 @@ def train(args, train_dataset, model, tokenizer):
 
                 optimizer.step()
                 scheduler.step()  # Update learning rate schedule
+                if args.one_iteration: raise CancelTrainException
                 model.zero_grad()
                 global_step += 1
 
@@ -663,6 +672,9 @@ def main():
     parser.add_argument("--server_port", type=str, default="", help="Can be used for distant debugging.")
 
     parser.add_argument("--threads", type=int, default=1, help="multiple threads for converting example to features")
+    parser.add_argument("--one_iteration", action="store_true", help="only train(or benchmark) one iteration")
+    parser.add_argument("--no_bwd", action="store_true", help="only fwd")
+    parser.add_argument("--no_optim", action="store_true", help="only fwd+bwd")
     args = parser.parse_args()
 
     if args.doc_stride >= args.max_seq_length - args.max_query_length:
@@ -766,7 +778,23 @@ def main():
     # Training
     if args.do_train:
         train_dataset = load_and_cache_examples(args, tokenizer, evaluate=False, output_examples=False)
-        global_step, tr_loss = train(args, train_dataset, model, tokenizer)
+        global train_meter
+        train_meter = StopwatchMeter()
+        try:
+            global_step, tr_loss = train(args, train_dataset, model, tokenizer)
+        except CancelBWDException:
+            train_meter.stop()
+            print("Done one-batch's FWD in {} seconds.".format(train_meter.sum))
+            return 0
+        except CancelOptimException:
+            train_meter.stop()
+            print("Done one-batch's FWD+BWD in {} seconds.".format(train_meter.sum))
+            return 0
+        except CancelTrainException:
+            train_meter.stop()
+            print("Done one-batch's trainning in {} seconds.".format(train_meter.sum))
+            return 0
+
         logger.info(" global_step = %s, average loss = %s", global_step, tr_loss)
 
     # Save the trained model and the tokenizer
