@@ -31,9 +31,10 @@ python3.6 $EXAMPLE \
   --per_gpu_train_batch_size 12 \
   --learning_rate 3e-5 \
   --num_train_epochs 1 \
-  --max_seq_length 128 \
-  --doc_stride 128 \
+  --max_seq_length 512 \
+  --doc_stride 256 \
   --output_dir $OUT_DIR \
   --overwrite_output_dir \
-  --one_iteration \
-  --no_bwd | tee $SQUAD_DIR/$FNAME.log
+  --one_iteration --no_optim | tee $SQUAD_DIR/$FNAME.log
+  #--one_iteration | tee $SQUAD_DIR/$FNAME.log
+  #--one_iteration --no_bwd | tee $SQUAD_DIR/$FNAME.log
