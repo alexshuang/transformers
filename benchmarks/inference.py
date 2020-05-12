@@ -5,6 +5,7 @@ import time
 bs, seq_len = 12, 512
 model_name = 'bert-large-uncased-whole-word-masking'
 
+print("Preparing model and dataset...")
 model = BertForPreTraining.from_pretrained(model_name).cuda()
 tokenizer = AutoTokenizer.from_pretrained(model_name)
 
