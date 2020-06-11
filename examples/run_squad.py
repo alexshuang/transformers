@@ -798,9 +798,10 @@ def main():
             print("Done one iteration's trainning in {} seconds.".format(train_meter.elasped_total))
         
         if args.one_iter:
-            data = {'model_name': args.model_name_or_path, 'dtype': 'FP16' if args.fp16 else 'FP32',
-                    'elasped': train_meter.elasped_total, 'num_iter': 1}
-            pd.DataFrame(data).to_csv(f"{args.model_name_or_path}_training_torch_res.csv", index=False)
+            data = {'model_name': [args.model_name_or_path], 'dtype': ['FP16'] if args.fp16 else ['FP32'],
+                    'elasped': [train_meter.elasped_total], 'num_iter': [1]}
+            df = pd.DataFrame(data)
+            df.to_csv(f'{args.model_name_or_path}_training_torch_res.csv', index=False)
             return 0
 
         logger.info(" global_step = %s, average loss = %s", global_step, tr_loss)

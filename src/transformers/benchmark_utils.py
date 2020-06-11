@@ -13,6 +13,7 @@ from collections import defaultdict
 from typing import Iterable, List, NamedTuple, Optional, Union
 
 from .file_utils import is_tf_available, is_torch_available
+import numpy as np
 
 
 if is_torch_available():
@@ -355,9 +356,9 @@ class StopwatchMeter():
             self.elasped.append(time.perf_counter() - self.start_time)
     
     @property
-    def elasped_total(self): return self.elasped.sum()
+    def elasped_total(self): return np.sum(self.elasped)
     @property
-    def elasped_avg(self): return self.elasped.mean()
+    def elasped_avg(self): return np.mean(self.elasped)
 
     def reset(self):
         self.elasped = []  # cumulative time during which stopwatch was active

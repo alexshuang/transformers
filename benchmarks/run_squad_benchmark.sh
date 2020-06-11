@@ -23,7 +23,8 @@ set -e
 export ROCBLAS_LAYER=2
 export ROCBLAS_LOG_BENCH_PATH=${MODEL}_rocblas_bench.csv
 
-/opt/rocm/bin/rocprof -i input.txt --timestamp on --stats -o ${MODEL_NAME}_training_gpu_res.csv \
+#/opt/rocm/bin/rocprof -i input.txt --timestamp on --stats -o ${MODEL_NAME}_training_gpu_res.csv \
+/opt/rocm/bin/rocprof -i input.txt --timestamp on -o ${MODEL_NAME}_training_gpu_res.csv \
 python3.6 $EXAMPLE \
   --model_type bert \
   --model_name_or_path $MODEL_NAME \
