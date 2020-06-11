@@ -345,23 +345,23 @@ def bytes_to_human_readable(memory_amount: int) -> str:
 class StopwatchMeter():
     """ Computes the sum/avg duration of some event in seconds """
     def __init__(self):
-        self.sum = 0
-        self.n = 0
-        self.start_time = None
+        self.reset()
 
     def start(self):
         self.start_time = time.perf_counter()
 
-    def stop(self, n=1):
+    def stop(self):
         if self.start_time is not None:
-            delta = time.perf_counter() - self.start_time
-        self.sum += delta
-        self.n += n
+            self.elasped.append(time.perf_counter() - self.start_time)
+    
+    @property
+    def elasped_total(self): return self.elasped.sum()
+    @property
+    def elasped_avg(self): return self.elasped.mean()
 
     def reset(self):
-        self.sum = 0  # cumulative time during which stopwatch was active
-        self.n = 0  # total n across all start/stop
-        self.start()
+        self.elasped = []  # cumulative time during which stopwatch was active
+        self.start_time = None
 
 
 class CancelBWDException(Exception): pass

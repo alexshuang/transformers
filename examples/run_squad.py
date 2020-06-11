@@ -46,6 +46,7 @@ from transformers.data.metrics.squad_metrics import (
 )
 from transformers.data.processors.squad import SquadResult, SquadV1Processor, SquadV2Processor
 from transformers.benchmark_utils import StopwatchMeter, CancelBWDException, CancelOptimException, CancelTrainException
+import pandas as pd
 
 
 try:
@@ -203,10 +204,13 @@ def train(args, train_dataset, model, tokenizer):
                         {"langs": (torch.ones(batch[0].shape, dtype=torch.int64) * args.lang_id).to(args.device)}
                     )
 
+            if args.warm_up:
+                model(**inputs)
+                 
             train_meter.start()
             outputs = model(**inputs)
 
-            if args.one_iteration and args.no_bwd: raise CancelBWDException
+            if args.one_iter and args.no_bwd: raise CancelBWDException
 
             # model outputs are always tuple in transformers (see doc)
             loss = outputs[0]
@@ -222,7 +226,7 @@ def train(args, train_dataset, model, tokenizer):
             else:
                 loss.backward()
 
-            if args.one_iteration and args.no_optim: raise CancelOptimException
+            if args.one_iter and args.no_optim: raise CancelOptimException
 
             tr_loss += loss.item()
             if (step + 1) % args.gradient_accumulation_steps == 0:
@@ -233,8 +237,8 @@ def train(args, train_dataset, model, tokenizer):
 
                 optimizer.step()
                 scheduler.step()  # Update learning rate schedule
-                if args.one_iteration: raise CancelTrainException
                 model.zero_grad()
+                if args.one_iter: raise CancelTrainException
                 global_step += 1
 
                 # Log metrics
@@ -672,9 +676,10 @@ def main():
     parser.add_argument("--server_port", type=str, default="", help="Can be used for distant debugging.")
 
     parser.add_argument("--threads", type=int, default=1, help="multiple threads for converting example to features")
-    parser.add_argument("--one_iteration", action="store_true", help="only train(or benchmark) one iteration")
+    parser.add_argument("--one_iter", action="store_true", help="only train(or benchmark) one iteration")
     parser.add_argument("--no_bwd", action="store_true", help="only fwd")
     parser.add_argument("--no_optim", action="store_true", help="only fwd+bwd")
+    parser.add_argument("--warm_up", action="store_true", help="warm up GPU")
     args = parser.parse_args()
 
     if args.doc_stride >= args.max_seq_length - args.max_query_length:
@@ -784,15 +789,18 @@ def main():
             global_step, tr_loss = train(args, train_dataset, model, tokenizer)
         except CancelBWDException:
             train_meter.stop()
-            print("Done one-batch's FWD in {} seconds.".format(train_meter.sum))
-            return 0
+            print("Done one iteration's FWD in {} seconds.".format(train_meter.elasped_total))
         except CancelOptimException:
             train_meter.stop()
-            print("Done one-batch's FWD+BWD in {} seconds.".format(train_meter.sum))
-            return 0
+            print("Done one iteration's FWD+BWD in {} seconds.".format(train_meter.elasped_total))
         except CancelTrainException:
             train_meter.stop()
-            print("Done one-batch's trainning in {} seconds.".format(train_meter.sum))
+            print("Done one iteration's trainning in {} seconds.".format(train_meter.elasped_total))
+        
+        if args.one_iter:
+            data = {'model_name': args.model_name_or_path, 'dtype': 'FP16' if args.fp16 else 'FP32',
+                    'elasped': train_meter.elasped_total, 'num_iter': 1}
+            pd.DataFrame(data).to_csv(f"{args.model_name_or_path}_training_torch_res.csv", index=False)
             return 0
 
         logger.info(" global_step = %s, average loss = %s", global_step, tr_loss)

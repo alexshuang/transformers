@@ -1,0 +1,1 @@
+pmc: WriteSize L2CacheHit
