@@ -353,15 +353,15 @@ class StopwatchMeter():
 
     def stop(self):
         if self.start_time is not None:
-            self.elasped.append(time.perf_counter() - self.start_time)
+            self.elapsed.append(time.perf_counter() - self.start_time)
     
     @property
-    def elasped_total(self): return np.sum(self.elasped)
+    def elapsed_total(self): return np.sum(self.elapsed)
     @property
-    def elasped_avg(self): return np.mean(self.elasped)
+    def elapsed_avg(self): return np.mean(self.elapsed)
 
     def reset(self):
-        self.elasped = []  # cumulative time during which stopwatch was active
+        self.elapsed = []  # cumulative time during which stopwatch was active
         self.start_time = None
 
 

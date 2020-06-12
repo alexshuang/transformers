@@ -789,19 +789,19 @@ def main():
             global_step, tr_loss = train(args, train_dataset, model, tokenizer)
         except CancelBWDException:
             train_meter.stop()
-            print("Done one iteration's FWD in {} seconds.".format(train_meter.elasped_total))
+            print("Done one iteration's FWD in {} seconds.".format(train_meter.elapsed_total))
         except CancelOptimException:
             train_meter.stop()
-            print("Done one iteration's FWD+BWD in {} seconds.".format(train_meter.elasped_total))
+            print("Done one iteration's FWD+BWD in {} seconds.".format(train_meter.elapsed_total))
         except CancelTrainException:
             train_meter.stop()
-            print("Done one iteration's trainning in {} seconds.".format(train_meter.elasped_total))
+            print("Done one iteration's trainning in {} seconds.".format(train_meter.elapsed_total))
         
         if args.one_iter:
             data = {'model_name': [args.model_name_or_path], 'dtype': ['FP16'] if args.fp16 else ['FP32'],
-                    'elasped': [train_meter.elasped_total], 'num_iter': [1]}
+                    'elapsed': [train_meter.elapsed_total], 'num_iter': [1]}
             df = pd.DataFrame(data)
-            df.to_csv(f'{args.model_name_or_path}_training_torch_res.csv', index=False)
+            df.to_csv(f'{args.data_dir}/out/{args.model_name_or_path}_training_torch_res.csv', index=False)
             return 0
 
         logger.info(" global_step = %s, average loss = %s", global_step, tr_loss)

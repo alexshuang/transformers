@@ -21,10 +21,9 @@ fi
 
 set -e
 export ROCBLAS_LAYER=2
-export ROCBLAS_LOG_BENCH_PATH=${MODEL}_rocblas_bench.csv
+export ROCBLAS_LOG_BENCH_PATH=${OUT_DIR}/${MODEL_NAME}_rocblas_bench.csv
 
-#/opt/rocm/bin/rocprof -i input.txt --timestamp on --stats -o ${MODEL_NAME}_training_gpu_res.csv \
-/opt/rocm/bin/rocprof -i input.txt --timestamp on -o ${MODEL_NAME}_training_gpu_res.csv \
+/opt/rocm/bin/rocprof -i input.txt --timestamp on --stats -o ${OUT_DIR}/${MODEL_NAME}_training_gpu_res.csv \
 python3.6 $EXAMPLE \
   --model_type bert \
   --model_name_or_path $MODEL_NAME \
@@ -40,4 +39,7 @@ python3.6 $EXAMPLE \
   --max_seq_length 384 \
   --doc_stride 128 \
   --output_dir /tmp/debug_squad/ \
+  --warm_up \
   --one_iter
+
+python3.6 stats.py -d ${OUT_DIR} -m ${MODEL_NAME} --do_train
