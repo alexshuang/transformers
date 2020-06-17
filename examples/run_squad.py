@@ -682,7 +682,11 @@ def main():
     parser.add_argument("--no_bwd", action="store_true", help="only fwd")
     parser.add_argument("--no_optim", action="store_true", help="only fwd+bwd")
     parser.add_argument("--warm_up", action="store_true", help="warm up GPU")
+    parser.add_argument("--resoult_dir", type=str, default="", help="output dir for profile results")
     args = parser.parse_args()
+
+    if args.resoult_dir == "":
+        args.resoult_dir = args.data_dir
 
     if args.doc_stride >= args.max_seq_length - args.max_query_length:
         logger.warning(

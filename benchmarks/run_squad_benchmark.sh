@@ -23,7 +23,7 @@ if [ ! -f $SQUAD_DIR/$TRAIN_FILE ]; then
 fi
 
 set -e
-export ROCBLAS_LAYER=4
+export ROCBLAS_LAYER=2
 export ROCBLAS_LOG_BENCH_PATH=${OUT_DIR}/rocblas_bench.csv
 export ROCBLAS_LOG_PROFILE_PATH=${OUT_DIR}/rocblas_profile.csv
 export ROCBLAS_LOG_TRACE_PATH=${OUT_DIR}/rocblas_trace.csv
