@@ -62,7 +62,7 @@ MODEL_TYPES = tuple(conf.model_type for conf in MODEL_CONFIG_CLASSES)
 
 ALL_MODELS = sum((tuple(conf.pretrained_config_archive_map.keys()) for conf in MODEL_CONFIG_CLASSES), (),)
 
-train_meter = None
+meter = StopwatchMeter()
 
 def set_seed(args):
     random.seed(args.seed)
@@ -204,11 +204,9 @@ def train(args, train_dataset, model, tokenizer):
                         {"langs": (torch.ones(batch[0].shape, dtype=torch.int64) * args.lang_id).to(args.device)}
                     )
 
-            if args.warm_up:
-                model(**inputs)
-                 
-            train_meter.start()
+            meter.forward_start()
             outputs = model(**inputs)
+            meter.forward_stop()
 
             if args.one_iter and args.no_bwd: raise CancelBWDException
 
@@ -220,11 +218,13 @@ def train(args, train_dataset, model, tokenizer):
             if args.gradient_accumulation_steps > 1:
                 loss = loss / args.gradient_accumulation_steps
 
+            meter.backward_start()
             if args.fp16:
                 with amp.scale_loss(loss, optimizer) as scaled_loss:
                     scaled_loss.backward()
             else:
                 loss.backward()
+            meter.backward_stop()
 
             if args.one_iter and args.no_optim: raise CancelOptimException
 
@@ -235,10 +235,12 @@ def train(args, train_dataset, model, tokenizer):
                 else:
                     torch.nn.utils.clip_grad_norm_(model.parameters(), args.max_grad_norm)
 
+                meter.optim_start()
                 optimizer.step()
                 scheduler.step()  # Update learning rate schedule
-                model.zero_grad()
+                meter.optim_stop()
                 if args.one_iter: raise CancelTrainException
+                model.zero_grad()
                 global_step += 1
 
                 # Log metrics
@@ -783,26 +785,28 @@ def main():
     # Training
     if args.do_train:
         train_dataset = load_and_cache_examples(args, tokenizer, evaluate=False, output_examples=False)
-        global train_meter
-        train_meter = StopwatchMeter()
+        num_iter, op = args.max_steps, 'training'
         try:
+            meter.train_start()
             global_step, tr_loss = train(args, train_dataset, model, tokenizer)
+            meter.train_stop()
         except CancelBWDException:
-            train_meter.stop()
-            print("Done one iteration's FWD in {} seconds.".format(train_meter.elapsed_total))
+            num_iter, op = 1, 'FWD'
         except CancelOptimException:
-            train_meter.stop()
-            print("Done one iteration's FWD+BWD in {} seconds.".format(train_meter.elapsed_total))
+            num_iter, op = 1, 'FWD+BWD'
         except CancelTrainException:
-            train_meter.stop()
-            print("Done one iteration's trainning in {} seconds.".format(train_meter.elapsed_total))
+            num_iter, op = 1, 'FWD+BWD+Optimize'
+        finally:
+            print("Done {} iteration {} in {} seconds.".format(num_iter, op, meter.train_elapsed_total))
         
-        if args.one_iter:
-            data = {'model_name': [args.model_name_or_path], 'dtype': ['FP16'] if args.fp16 else ['FP32'],
-                    'elapsed': [train_meter.elapsed_total], 'num_iter': [1]}
-            df = pd.DataFrame(data)
-            df.to_csv(f'{args.data_dir}/out/{args.model_name_or_path}_training_torch_res.csv', index=False)
-            return 0
+        data = {'model_name': [args.model_name_or_path], 'dtype': ['FP16'] if args.fp16 else ['FP32'],
+                'total_train_elapsed': [meter.train_elapsed_total], 'avg_train_elapsed': [meter.train_elapsed_total / args.max_steps],
+                'total_fwd_elapsed': [meter.fwd_elapsed_total], 'avg_fwd_elapsed': [meter.fwd_elapsed_avg],
+                'total_bwd_elapsed': [meter.bwd_elapsed_total], 'avg_bwd_elapsed': [meter.bwd_elapsed_avg],
+                'total_optim_elapsed': [meter.optim_elapsed_total], 'avg_optim_elapsed': [meter.optim_elapsed_avg],
+                'num_iter': [args.max_steps]}
+        df = pd.DataFrame(data)
+        df.to_csv(f'{args.resoult_dir}/{args.model_name_or_path}_pytorch_perf.csv', index=False)
 
         logger.info(" global_step = %s, average loss = %s", global_step, tr_loss)
 

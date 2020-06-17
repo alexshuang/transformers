@@ -348,21 +348,54 @@ class StopwatchMeter():
     def __init__(self):
         self.reset()
 
-    def start(self):
-        self.start_time = time.perf_counter()
+    def train_start(self):
+        self.trn_start = time.perf_counter()
 
-    def stop(self):
-        if self.start_time is not None:
-            self.elapsed.append(time.perf_counter() - self.start_time)
+    def train_stop(self):
+        if self.trn_start is not None:
+            self.train_elapsed.append(time.perf_counter() - self.trn_start)
     
+    def forward_start(self):
+        self.fwd_start = time.perf_counter()
+
+    def forward_stop(self):
+        if self.fwd_start is not None:
+            self.fwd_elapsed.append(time.perf_counter() - self.fwd_start)
+    
+    def backward_start(self):
+        self.bwd_start = time.perf_counter()
+
+    def backward_stop(self):
+        if self.bwd_start is not None:
+            self.bwd_elapsed.append(time.perf_counter() - self.bwd_start)
+
+    def optim_start(self):
+        self.opt_start = time.perf_counter()
+
+    def optim_stop(self):
+        if self.opt_start is not None:
+            self.optim_elapsed.append(time.perf_counter() - self.opt_start)
+
     @property
-    def elapsed_total(self): return np.sum(self.elapsed)
+    def train_elapsed_total(self): return np.sum(self.train_elapsed)
     @property
-    def elapsed_avg(self): return np.mean(self.elapsed)
+    def train_elapsed_avg(self): return np.mean(self.train_elapsed)
+    @property
+    def fwd_elapsed_total(self): return np.sum(self.fwd_elapsed)
+    @property
+    def fwd_elapsed_avg(self): return np.mean(self.fwd_elapsed)
+    @property
+    def bwd_elapsed_total(self): return np.sum(self.bwd_elapsed)
+    @property
+    def bwd_elapsed_avg(self): return np.mean(self.bwd_elapsed)
+    @property
+    def optim_elapsed_total(self): return np.sum(self.optim_elapsed)
+    @property
+    def optim_elapsed_avg(self): return np.mean(self.optim_elapsed)
 
     def reset(self):
-        self.elapsed = []  # cumulative time during which stopwatch was active
-        self.start_time = None
+        self.train_elapsed, self.fwd_elapsed, self.bwd_elapsed, self.optim_elapsed = [], [], [], [] # cumulative time during which stopwatch was active
+        self.trn_start, self.fwd_start, self.bwd_start, self.opt_start = None, None, None, None
 
 
 class CancelBWDException(Exception): pass

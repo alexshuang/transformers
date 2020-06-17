@@ -43,6 +43,7 @@ python3.6 $EXAMPLE \
   --doc_stride 128 \
   --output_dir /tmp/debug_squad/ \
   --overwrite_output_dir \
+  --resoult_dir $OUT_DIR \
   --fp16 \
   --max_steps $STEPS
   #--do_eval \
