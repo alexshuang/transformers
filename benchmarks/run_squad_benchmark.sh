@@ -11,10 +11,11 @@ VALID_FILE=dev-v1.1.json
 
 SEQ_LEN=512
 BS=4
-STEPS=1
+STEPS=3
 
 OUT_DIR=$SQUAD_DIR/${MODEL_NAME}-seq_len=${SEQ_LEN}-bs=${BS}-steps=${STEPS}
 
+rm -rf $OUT_DIR
 mkdir -p $OUT_DIR
 
 if [ ! -f $SQUAD_DIR/$TRAIN_FILE ]; then
@@ -22,13 +23,15 @@ if [ ! -f $SQUAD_DIR/$TRAIN_FILE ]; then
 	wget -P $SQUAD_DIR https://rajpurkar.github.io/SQuAD-explorer/dataset/dev-v1.1.json
 fi
 
-set -e
+#set -e
 export ROCBLAS_LAYER=2
+export ELAPSED=2
 export ROCBLAS_LOG_BENCH_PATH=${OUT_DIR}/rocblas_bench.csv
 export ROCBLAS_LOG_PROFILE_PATH=${OUT_DIR}/rocblas_profile.csv
 export ROCBLAS_LOG_TRACE_PATH=${OUT_DIR}/rocblas_trace.csv
+rm -f ${ROCBLAS_LOG_BENCH_PATH}
 
-/opt/rocm/bin/rocprof -i input.txt --obj-tracking on --timestamp on --stats -o ${OUT_DIR}/kernels.csv \
+#/opt/rocm/bin/rocprof -i input.txt --obj-tracking on --timestamp on --stats -o ${OUT_DIR}/kernels.csv \
 python3.6 $EXAMPLE \
   --model_type bert \
   --model_name_or_path $MODEL_NAME \
@@ -46,7 +49,19 @@ python3.6 $EXAMPLE \
   --resoult_dir $OUT_DIR \
   --fp16 \
   --max_steps $STEPS
-  #--do_eval \
-  #--predict_file $VALID_FILE \
 
-#python3.6 stats.py -d ${OUT_DIR} -m ${MODEL_NAME} --do_train
+unset ROCBLAS_LAYER
+TOOL=~/rocblas/build/release/clients/staging/rocblas-bench
+ln -s ${TOOL} .
+
+#sed 's/\(rocblas-bench\)/\1 -i 1 -j 2/g' ${OUT_DIR}/rocblas_bench.csv > /tmp/rocblas_bench.csv
+#sed -n '57,$p' /tmp/rocblas_bench.csv > /tmp/rocblas_bench_trail.csv
+
+
+sed -n '1161,$p' $ROCBLAS_LOG_BENCH_PATH > /tmp/rocblas_bench_trail.csv
+sh /tmp/rocblas_bench_trail.csv | tee /tmp/rocblas_bench_res.txt
+sed -E -n '/(^N,|^T,)/p' /tmp/rocblas_bench_res.txt > ${OUT_DIR}/rocblas_bench_res.txt
+
+#python3.6 run_rocblas_bench.py -f $ROCBLAS_LOG_BENCH_PATH
+
+rm -f ${OUT_DIR}/*.db

@@ -64,6 +64,75 @@ ALL_MODELS = sum((tuple(conf.pretrained_config_archive_map.keys()) for conf in M
 
 meter = StopwatchMeter()
 
+
+def model_summary(m, inputs):
+    def register_hook(module):
+        def fwd_hook(module, input, output):
+            pdb.set_trace()
+            class_name = str(module.__class__).split('.')[-1].split("'")[0]
+            module_idx = len(fwd_summary)
+
+            m_key = '%s-%i.%s' % (class_name, module_idx+1, 'fwd')
+            fwd_summary[m_key] = OrderedDict()
+            if len(input) > 0:
+              fwd_summary[m_key]['input_shape'] = list(input[0].size())
+              fwd_summary[m_key]['input_shape'][0] = -1
+            else:
+              fwd_summary[m_key]['input_shape'] = [-1]             
+            if is_listy(output):
+                fwd_summary[m_key]['output_shape'] = [[-1] + list(o.size())[1:] for o in output]
+            else:
+                fwd_summary[m_key]['output_shape'] = list(output.size())
+                fwd_summary[m_key]['output_shape'][0] = -1
+
+            params = 0
+            if hasattr(module, 'weight'):
+                params += torch.prod(torch.LongTensor(list(module.weight.size())))
+                fwd_summary[m_key]['trainable'] = module.weight.requires_grad
+            if hasattr(module, 'bias') and module.bias is not None:
+                params +=  torch.prod(torch.LongTensor(list(module.bias.size())))
+            fwd_summary[m_key]['nb_params'] = params
+
+        def bwd_hook(module, input_grad, output_grad):
+            pdb.set_trace()
+            class_name = str(module.__class__).split('.')[-1].split("'")[0]
+            module_idx = len(bwd_summary)
+
+            m_key = '%s-%i.%s' % (class_name, module_idx+1, 'bwd')
+            bwd_summary[m_key] = OrderedDict()
+            if len(input) > 0:
+              summary[m_key]['input_shape'] = list(input[0].size())
+              summary[m_key]['input_shape'][0] = -1
+            else:
+              summary[m_key]['input_shape'] = [-1]             
+            if is_listy(output):
+                summary[m_key]['output_shape'] = [[-1] + list(o.size())[1:] for o in output]
+            else:
+                summary[m_key]['output_shape'] = list(output.size())
+                summary[m_key]['output_shape'][0] = -1
+
+            params = 0
+            if hasattr(module, 'weight'):
+                params += torch.prod(torch.LongTensor(list(module.weight.size())))
+                summary[m_key]['trainable'] = module.weight.requires_grad
+            if hasattr(module, 'bias') and module.bias is not None:
+                params +=  torch.prod(torch.LongTensor(list(module.bias.size())))
+            summary[m_key]['nb_params'] = params
+
+        if (not isinstance(module, nn.Sequential) and
+           not isinstance(module, nn.ModuleList) and
+           not (module == m)):
+            hooks.append(module.register_forward_hook(fwd_hook))
+            hooks.append(module.register_backward_hook(bwd_hook))
+
+    fwd_summary, bwd_summary = OrderedDict(), OrderedDict()
+    hooks = []
+    m.apply(register_hook)
+    m(inputs)
+
+    for h in hooks: h.remove()
+    return summary
+
 def set_seed(args):
     random.seed(args.seed)
     np.random.seed(args.seed)
