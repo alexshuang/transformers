@@ -214,7 +214,7 @@ def train(args, train_dataset, model, tokenizer):
     logger.info("  Gradient Accumulation steps = %d", args.gradient_accumulation_steps)
     logger.info("  Total optimization steps = %d", t_total)
 
-    global_step = 1
+    global_step = 0
     epochs_trained = 0
     steps_trained_in_current_epoch = 0
     # Check if continuing training from a checkpoint
@@ -244,6 +244,7 @@ def train(args, train_dataset, model, tokenizer):
     for _ in train_iterator:
         epoch_iterator = tqdm(train_dataloader, desc="Iteration", disable=args.local_rank not in [-1, 0])
         for step, batch in enumerate(epoch_iterator):
+            meter.iter_start()
 
             # Skip past any already trained steps if resuming training
             if steps_trained_in_current_epoch > 0:
@@ -340,10 +341,15 @@ def train(args, train_dataset, model, tokenizer):
                     torch.save(scheduler.state_dict(), os.path.join(output_dir, "scheduler.pt"))
                     logger.info("Saving optimizer and scheduler states to %s", output_dir)
 
-            if args.max_steps > 0 and global_step > args.max_steps:
+            meter.iter_stop()
+
+            if args.warmup_steps > 0 and global_step <= args.warmup_steps:
+                meter.reset()
+
+            if args.max_steps > 0 and global_step >= args.max_steps:
                 epoch_iterator.close()
                 break
-        if args.max_steps > 0 and global_step > args.max_steps:
+        if args.max_steps > 0 and global_step >= args.max_steps:
             train_iterator.close()
             break
 
@@ -751,11 +757,8 @@ def main():
     parser.add_argument("--no_bwd", action="store_true", help="only fwd")
     parser.add_argument("--no_optim", action="store_true", help="only fwd+bwd")
     parser.add_argument("--warm_up", action="store_true", help="warm up GPU")
-    parser.add_argument("--resoult_dir", type=str, default="", help="output dir for profile results")
+    parser.add_argument("--result_dir", type=str, default="", help="output dir for profile results")
     args = parser.parse_args()
-
-    if args.resoult_dir == "":
-        args.resoult_dir = args.data_dir
 
     if args.doc_stride >= args.max_seq_length - args.max_query_length:
         logger.warning(
@@ -860,9 +863,10 @@ def main():
         train_dataset = load_and_cache_examples(args, tokenizer, evaluate=False, output_examples=False)
         num_iter, op = args.max_steps, 'training'
         try:
-            meter.train_start()
+            meter.reset()
+            #meter.train_start()
             global_step, tr_loss = train(args, train_dataset, model, tokenizer)
-            meter.train_stop()
+            #meter.train_stop()
         except CancelBWDException:
             num_iter, op = 1, 'FWD'
         except CancelOptimException:
@@ -870,16 +874,17 @@ def main():
         except CancelTrainException:
             num_iter, op = 1, 'FWD+BWD+Optimize'
         finally:
-            print("Done {} iteration {} in {} seconds.".format(num_iter, op, meter.train_elapsed_total))
-        
-        data = {'model_name': [args.model_name_or_path], 'dtype': ['FP16'] if args.fp16 else ['FP32'],
-                'total_train_elapsed': [meter.train_elapsed_total], 'avg_train_elapsed': [meter.train_elapsed_total / args.max_steps],
-                'total_fwd_elapsed': [meter.fwd_elapsed_total], 'avg_fwd_elapsed': [meter.fwd_elapsed_avg],
-                'total_bwd_elapsed': [meter.bwd_elapsed_total], 'avg_bwd_elapsed': [meter.bwd_elapsed_avg],
-                'total_optim_elapsed': [meter.optim_elapsed_total], 'avg_optim_elapsed': [meter.optim_elapsed_avg],
-                'num_iter': [args.max_steps]}
-        df = pd.DataFrame(data)
-        df.to_csv(f'{args.resoult_dir}/{args.model_name_or_path}_pytorch_perf.csv', index=False)
+            print("Done {} iterations in {} seconds.".format(global_step, meter.iter_elapsed_total))
+
+        if args.result_dir:
+            res = {'Model': [args.model_name_or_path], 'Dtype': ['FP16'] if args.fp16 else ['FP32'],
+                    'BatchSize': [args.per_gpu_train_batch_size], 'SeqLen': [args.max_seq_length],
+                    'Iteration': [num_iter], 'TotalDurationNs': [meter.iter_elapsed_total * 1e9],
+                    'AvgIterDurationNs': [meter.iter_elapsed_avg * 1e9], 'AvgFwdDurationNs': [meter.fwd_elapsed_avg * 1e9],
+                    'AvgBwdDurationNs': [meter.bwd_elapsed_avg * 1e9], 'AvgOptimDurationNs': [meter.optim_elapsed_avg * 1e9]}
+            df = pd.DataFrame(res)
+            #df = pd.DataFrame(res, dtype=[np.str, np.str, np.int32, np.int32, np.int32, np.int64, np.int64, np.int64, np.int64, np.int64])
+            df.to_csv(f'{args.result_dir}/model.csv', index=False)
 
         logger.info(" global_step = %s, average loss = %s", global_step, tr_loss)
 
