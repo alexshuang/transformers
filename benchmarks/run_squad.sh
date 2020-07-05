@@ -4,23 +4,21 @@ TOP_DIR=../
 EXAMPLE=$TOP_DIR/examples/run_squad.py
 BASENAME=${EXAMPLE##*/}
 FNAME=${BASENAME%.*}
-SQUAD_DIR=/dockerx/data/squad
+SQUAD_DIR=/data/squad
 MODEL_NAME=bert-large-uncased
 TRAIN_FILE=train-v1.1.json
 VALID_FILE=dev-v1.1.json
 
 SEQ_LEN=512
 BS=4
-
-MODE=${1:-0} # 0: end2end 1: end2end+rocblas_bench+rocprof
 STEPS=${2:-120}
 WARMUP_STEPS=20
 if [ $STEPS -le $WARMUP_STEPS ]; then
     WARMUP_STEPS=$(expr $STEPS / 5)
 fi
-NUM_ENTRIES=580
 
 OUT_DIR=$SQUAD_DIR/${MODEL_NAME}-seq_len=${SEQ_LEN}-bs=${BS}-steps=${STEPS}
+rm -rf $OUT_DIR
 mkdir -p $OUT_DIR
 
 if [ ! -f $SQUAD_DIR/$TRAIN_FILE ]; then
@@ -42,23 +40,30 @@ CMD="python3.6 $EXAMPLE \
   --doc_stride 128 \
   --output_dir /tmp/debug_squad/ \
   --overwrite_output_dir \
-  --fp16 \
-  --max_steps $STEPS"
+  --fp16"
 
 set -e
 
-if [ $MODE -eq 0 ]; then
-    $CMD --result_dir $OUT_DIR
-elif [ $MODE -ge 1 ]; then
-	export ROCBLAS_LAYER=2
-	export ROCBLAS_LOG_BENCH_PATH=${OUT_DIR}/rocblas_bench.csv
-	export ROCBLAS_LOG_PROFILE_PATH=${OUT_DIR}/rocblas_profile.csv
-	export ROCBLAS_LOG_TRACE_PATH=${OUT_DIR}/rocblas_trace.csv
-	rm -f ${ROCBLAS_LOG_BENCH_PATH}
+# end2end perf
+$CMD --result_dir $OUT_DIR --max_steps $STEPS
 
-	echo "pmc: FetchSize L2CacheHit" > input.txt
-	/opt/rocm/bin/rocprof -i input.txt --obj-tracking on --timestamp on --stats -o ${OUT_DIR}/model_prof.csv \
-	$CMD
-	rm -f ${OUT_DIR}/*.db ${OUT_DIR}/*.json ${OUT_DIR}/*.txt
+# record kernels
+export ROCBLAS_LAYER=2
+export ROCBLAS_LOG_BENCH_PATH=${OUT_DIR}/rocblas_bench.csv
+rm -f ${ROCBLAS_LOG_BENCH_PATH}
+
+echo "pmc: FetchSize L2CacheHit" > input.txt
+/opt/rocm/bin/rocprof -i input.txt --obj-tracking on --timestamp on --stats -o ${OUT_DIR}/kernel_prof.csv \
+$CMD --max_steps 1
+rm -f ${OUT_DIR}/*.db ${OUT_DIR}/*.json ${OUT_DIR}/*.txt
+
+# rocblas-bench
+TOOL=/root/rocblas/build/release/clients/staging/rocblas-bench
+if [ ! -e rocblas-bench ]; then
+	ln -s ${TOOL} .
 fi
 
+unset ROCBLAS_LAYER
+sh $ROCBLAS_LOG_BENCH_PATH | tee /tmp/rb_res.txt
+sed -E -n '/(^N,|^T,)/p' /tmp/rb_res.txt > $OUT_DIR/rocblas_bench_res.csv
+echo "File $OUT_DIR/rocblas_bench_res.csv is generated."
