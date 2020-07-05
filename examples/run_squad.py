@@ -877,9 +877,8 @@ def main():
             print("Done {} iterations in {} seconds.".format(global_step, meter.iter_elapsed_total))
 
         if args.result_dir:
-            res = {'Model': [args.model_name_or_path], 'Dtype': ['FP16'] if args.fp16 else ['FP32'],
-                    'BatchSize': [args.per_gpu_train_batch_size], 'SeqLen': [args.max_seq_length],
-                    'Iteration': [num_iter], 'TotalDurationNs': [meter.iter_elapsed_total * 1e9],
+            res = {'Model': ['BERT'], 'Dtype': ['FP16'] if args.fp16 else ['FP32'],
+                    'Iteration': [len(meter.iter_elapsed)], 'TotalDurationNs': [meter.iter_elapsed_total * 1e9],
                     'AvgIterDurationNs': [meter.iter_elapsed_avg * 1e9], 'AvgFwdDurationNs': [meter.fwd_elapsed_avg * 1e9],
                     'AvgBwdDurationNs': [meter.bwd_elapsed_avg * 1e9], 'AvgOptimDurationNs': [meter.optim_elapsed_avg * 1e9]}
             df = pd.DataFrame(res)
