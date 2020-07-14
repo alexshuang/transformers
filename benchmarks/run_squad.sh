@@ -17,7 +17,7 @@ if [ $STEPS -le $WARMUP_STEPS ]; then
     WARMUP_STEPS=$(expr $STEPS / 5)
 fi
 
-OUT_DIR=/data/rocm${ROCM_VERSION}_rocblas${ROCBLAS_VERSION}/squad
+OUT_DIR=$1
 rm -rf $OUT_DIR
 mkdir -p $OUT_DIR
 
