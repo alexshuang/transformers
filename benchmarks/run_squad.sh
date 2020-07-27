@@ -1,24 +1,17 @@
 #!/bin/sh
 
-TOP_DIR=../
-EXAMPLE=$TOP_DIR/examples/run_squad.py
-BASENAME=${EXAMPLE##*/}
-FNAME=${BASENAME%.*}
+OUT_DIR=${1:-out}
 SQUAD_DIR=/data/squad
 MODEL_NAME=bert-large-uncased
 TRAIN_FILE=train-v1.1.json
 VALID_FILE=dev-v1.1.json
 
-SEQ_LEN=512
-BS=4
 STEPS=${2:-120}
 WARMUP_STEPS=20
-if [ $STEPS -le $WARMUP_STEPS ]; then
-    WARMUP_STEPS=$(expr $STEPS / 5)
-fi
+BS=${3:-4}
+SEQ_LEN=${4:-512}
 
-OUT_DIR=$1
-rm -rf $OUT_DIR
+#rm -rf $OUT_DIR
 mkdir -p $OUT_DIR
 
 if [ ! -f $SQUAD_DIR/$TRAIN_FILE ]; then
@@ -26,7 +19,7 @@ if [ ! -f $SQUAD_DIR/$TRAIN_FILE ]; then
 	wget -P $SQUAD_DIR https://rajpurkar.github.io/SQuAD-explorer/dataset/dev-v1.1.json
 fi
 
-CMD="python3.6 $EXAMPLE \
+CMD="python3.6 ../examples/run_squad.py \
   --model_type bert \
   --model_name_or_path $MODEL_NAME \
   --data_dir $SQUAD_DIR \
@@ -38,7 +31,7 @@ CMD="python3.6 $EXAMPLE \
   --num_train_epochs 1 \
   --max_seq_length $SEQ_LEN \
   --doc_stride 128 \
-  --output_dir /tmp/debug_squad/ \
+  --output_dir $OUT_DIR \
   --overwrite_output_dir \
   --fp16"
 
@@ -56,6 +49,8 @@ echo "pmc: FetchSize L2CacheHit" > input.txt
 /opt/rocm/bin/rocprof -i input.txt --obj-tracking on --timestamp on --stats -o ${OUT_DIR}/kernel_prof.csv \
 $CMD --max_steps 1
 rm -f ${OUT_DIR}/*.db ${OUT_DIR}/*.json ${OUT_DIR}/*.txt
+
+sed -n '/Cijk_A/p' ${OUT_DIR}/kernel_prof.csv | awk -F, '{print $2}' > ${OUT_DIR}/kernel_name.csv
 
 # rocblas-bench
 TOOL=/root/rocblas/build/release/clients/staging/rocblas-bench
