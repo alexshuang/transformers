@@ -31,7 +31,7 @@ CMD="python3.6 ../examples/run_squad.py \
   --num_train_epochs 1 \
   --max_seq_length $SEQ_LEN \
   --doc_stride 128 \
-  --output_dir $OUT_DIR \
+  --output_dir /tmp/squad \
   --overwrite_output_dir \
   --fp16"
 
