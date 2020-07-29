@@ -245,6 +245,8 @@ def train(args, train_dataset, model, tokenizer):
         epoch_iterator = tqdm(train_dataloader, desc="Iteration", disable=args.local_rank not in [-1, 0])
         for step, batch in enumerate(epoch_iterator):
 
+            meter.iter_start()
+
             # Skip past any already trained steps if resuming training
             if steps_trained_in_current_epoch > 0:
                 steps_trained_in_current_epoch -= 1
@@ -343,8 +345,6 @@ def train(args, train_dataset, model, tokenizer):
             meter.iter_stop()
 
             if args.warmup_steps > 0 and global_step < args.warmup_steps: meter.reset()
-
-            meter.iter_start()
 
             if args.max_steps > 0 and global_step >= args.max_steps:
                 epoch_iterator.close()
