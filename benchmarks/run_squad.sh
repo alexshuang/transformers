@@ -7,7 +7,7 @@ MODEL_NAME=bert-large-uncased
 TRAIN_FILE=train-v1.1.json
 VALID_FILE=dev-v1.1.json
 
-STEPS=${2:-120}
+STEPS=${2:-220}
 WARMUP_STEPS=20
 BS=${3:-4}
 SEQ_LEN=${4:-512}
@@ -52,6 +52,8 @@ echo "pmc: FetchSize L2CacheHit" > input.txt
 $CMD --max_steps 1
 
 sed -n '/Cijk_A/p' ${TMP_DIR}/kernel_prof.csv > ${OUT_DIR}/kernel_prof.csv
+
+#exit 0
 
 # rocblas-bench
 TOOL=/root/rocblas/build/release/clients/staging/rocblas-bench
