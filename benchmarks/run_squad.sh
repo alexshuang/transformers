@@ -7,8 +7,8 @@ MODEL_NAME=bert-large-uncased
 TRAIN_FILE=train-v1.1.json
 VALID_FILE=dev-v1.1.json
 
-STEPS=${2:-220}
-WARMUP_STEPS=20
+STEPS=${2:-1000}
+WARMUP_STEPS=30
 BS=${3:-4}
 SEQ_LEN=${4:-512}
 
@@ -51,9 +51,8 @@ echo "pmc: FetchSize L2CacheHit" > input.txt
 /opt/rocm/bin/rocprof -i input.txt --obj-tracking on --timestamp on --stats -o ${TMP_DIR}/kernel_prof.csv \
 $CMD --max_steps 1
 
+sed "s/$/ -i ${STEPS} -j ${WARMUP_STEPS}/g" $ROCBLAS_LOG_BENCH_PATH > ${TMP_DIR}/rb.csv
 sed -n '/Cijk_A/p' ${TMP_DIR}/kernel_prof.csv > ${OUT_DIR}/kernel_prof.csv
-
-#exit 0
 
 # rocblas-bench
 TOOL=/root/rocblas/build/release/clients/staging/rocblas-bench
@@ -61,6 +60,6 @@ if [ ! -e rocblas-bench ]; then
 	ln -s ${TOOL} .
 fi
 unset ROCBLAS_LAYER
-sh $ROCBLAS_LOG_BENCH_PATH 2>&1 > $TMP_DIR/rb_res.txt | tee rocblas_bench.log
+sh ${TMP_DIR}/rb.csv 2>&1 > $TMP_DIR/rb_res.txt | tee $TMP_DIR/rocblas_bench.log
 sed -E -n '/(^N,|^T,)/p' $TMP_DIR/rb_res.txt > $OUT_DIR/rocblas_bench_res.csv
 echo "File $OUT_DIR/rocblas_bench_res.csv is generated."
