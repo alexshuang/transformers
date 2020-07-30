@@ -314,6 +314,10 @@ def train(args, train_dataset, model, tokenizer):
                 model.zero_grad()
                 global_step += 1
 
+                meter.iter_stop()
+
+                if args.warmup_steps > 0 and global_step < args.warmup_steps: meter.reset()
+
                 # Log metrics
                 if args.local_rank in [-1, 0] and args.logging_steps > 0 and global_step % args.logging_steps == 0:
                     # Only evaluate when single GPU otherwise metrics may not average well
@@ -341,10 +345,6 @@ def train(args, train_dataset, model, tokenizer):
                     torch.save(optimizer.state_dict(), os.path.join(output_dir, "optimizer.pt"))
                     torch.save(scheduler.state_dict(), os.path.join(output_dir, "scheduler.pt"))
                     logger.info("Saving optimizer and scheduler states to %s", output_dir)
-
-            meter.iter_stop()
-
-            if args.warmup_steps > 0 and global_step < args.warmup_steps: meter.reset()
 
             if args.max_steps > 0 and global_step >= args.max_steps:
                 epoch_iterator.close()
