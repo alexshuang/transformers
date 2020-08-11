@@ -51,7 +51,7 @@ echo "pmc: FetchSize L2CacheHit" > input.txt
 /opt/rocm/bin/rocprof -i input.txt --obj-tracking on --timestamp on --stats -o ${TMP_DIR}/kernel_prof.csv \
 $CMD --max_steps 1
 
-sed "s/$/ -i ${STEPS} -j ${WARMUP_STEPS}\/nsleep 1/g" $ROCBLAS_LOG_BENCH_PATH > ${TMP_DIR}/rb.csv
+sed "s/$/ -i ${STEPS} -j ${WARMUP_STEPS}\\nsleep 1/g" $ROCBLAS_LOG_BENCH_PATH > ${TMP_DIR}/rb.csv
 sed -n '/Cijk_A/p' ${TMP_DIR}/kernel_prof.csv > ${OUT_DIR}/kernel_prof.csv
 
 # rocblas-bench
