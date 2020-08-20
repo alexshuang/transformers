@@ -67,9 +67,6 @@ echo "pmc: FetchSize L2CacheHit" > input.txt
 $CMD --max_steps 100
 rm $TMP_DIR/*.db $TMP_DIR/*.txt $TMP_DIR/*.json
 
-sed "s/$/ -i ${STEPS} -j ${WARMUP_STEPS}/g" $ROCBLAS_LOG_BENCH_PATH > ${TMP_DIR}/rb.csv
-sed -n '/Cijk_A/p' ${TMP_DIR}/kernel_prof.csv > ${OUT_DIR}/kernel_prof.csv
-
 # split one iteration
 NUM_GEMM_PER_ITER=580
 tail -$NUM_GEMM_PER_ITER $ROCBLAS_LOG_BENCH_PATH > $TMP_DIR/rb.csv
@@ -77,7 +74,7 @@ cp $TMP_DIR/rb.csv $ROCBLAS_LOG_BENCH_PATH
 sed -n '/Cijk_A/p' ${TMP_DIR}/kernel_prof.csv > $TMP_DIR/gemm_kernel_prof.csv
 tail -$NUM_GEMM_PER_ITER $TMP_DIR/gemm_kernel_prof.csv > $OUT_DIR/kernel_prof.csv
 
-sed "s/$/ -i ${STEPS} -j ${WARMUP_STEPS}/g" $ROCBLAS_LOG_BENCH_PATH > ${TMP_DIR}/_rb.csv
+sed "s/$/ -i ${STEPS} -j ${WARMUP_STEPS}/g" $ROCBLAS_LOG_BENCH_PATH > ${TMP_DIR}/rb.csv
 
 # rocblas-bench
 TOOL=/root/rocblas/build/release/clients/staging/rocblas-bench
