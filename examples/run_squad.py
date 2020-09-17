@@ -28,6 +28,11 @@ import torch
 from torch.utils.data import DataLoader, RandomSampler, SequentialSampler
 from torch.utils.data.distributed import DistributedSampler
 from tqdm import tqdm, trange
+from torch import nn
+
+from collections import OrderedDict
+fwd_summary, bwd_summary = OrderedDict(), OrderedDict()
+hooks = []
 
 from transformers import (
     MODEL_FOR_QUESTION_ANSWERING_MAPPING,
@@ -48,12 +53,10 @@ from transformers.data.processors.squad import SquadResult, SquadV1Processor, Sq
 from transformers.benchmark_utils import StopwatchMeter, CancelBWDException, CancelOptimException, CancelTrainException
 import pandas as pd
 
-
 try:
     from torch.utils.tensorboard import SummaryWriter
 except ImportError:
     from tensorboardX import SummaryWriter
-
 
 logger = logging.getLogger(__name__)
 
@@ -64,74 +67,74 @@ ALL_MODELS = sum((tuple(conf.pretrained_config_archive_map.keys()) for conf in M
 
 meter = StopwatchMeter()
 
+log_fp = None
 
-def model_summary(m, inputs):
+def save_log(layer_name:str, data:dict):
+    global log_fp
+    s = '{}'.format(layer_name)
+    for k, v in data.items():
+        s += ', {}: {}'.format(k, v)
+    with open(log_fp, 'a+') as fp:
+        fp.write(s + '\n')
+
+
+def model_summary(m):
     def register_hook(module):
-        def fwd_hook(module, input, output):
-            pdb.set_trace()
+        def fwd_hook(module, input):
             class_name = str(module.__class__).split('.')[-1].split("'")[0]
             module_idx = len(fwd_summary)
-
             m_key = '%s-%i.%s' % (class_name, module_idx+1, 'fwd')
             fwd_summary[m_key] = OrderedDict()
             if len(input) > 0:
-              fwd_summary[m_key]['input_shape'] = list(input[0].size())
-              fwd_summary[m_key]['input_shape'][0] = -1
+                fwd_summary[m_key]['input'] = list(input[0].size())
             else:
-              fwd_summary[m_key]['input_shape'] = [-1]             
-            if is_listy(output):
-                fwd_summary[m_key]['output_shape'] = [[-1] + list(o.size())[1:] for o in output]
-            else:
-                fwd_summary[m_key]['output_shape'] = list(output.size())
-                fwd_summary[m_key]['output_shape'][0] = -1
+                fwd_summary[m_key]['input'] = [-1]
 
             params = 0
             if hasattr(module, 'weight'):
+                fwd_summary[m_key]['weight'] = list(module.weight.size())
                 params += torch.prod(torch.LongTensor(list(module.weight.size())))
                 fwd_summary[m_key]['trainable'] = module.weight.requires_grad
             if hasattr(module, 'bias') and module.bias is not None:
+                fwd_summary[m_key]['bias'] = list(module.bias.size())
                 params +=  torch.prod(torch.LongTensor(list(module.bias.size())))
             fwd_summary[m_key]['nb_params'] = params
+            save_log(m_key, fwd_summary[m_key])
 
         def bwd_hook(module, input_grad, output_grad):
-            pdb.set_trace()
+            import pdb; pdb.set_trace()
             class_name = str(module.__class__).split('.')[-1].split("'")[0]
             module_idx = len(bwd_summary)
-
             m_key = '%s-%i.%s' % (class_name, module_idx+1, 'bwd')
             bwd_summary[m_key] = OrderedDict()
-            if len(input) > 0:
-              summary[m_key]['input_shape'] = list(input[0].size())
-              summary[m_key]['input_shape'][0] = -1
+            if len(input_grad) > 0:
+              bwd_summary[m_key]['input_grad_shape'] = list(input_grad[0].size())
+              bwd_summary[m_key]['input_grad_shape'][0] = -1
             else:
-              summary[m_key]['input_shape'] = [-1]             
-            if is_listy(output):
-                summary[m_key]['output_shape'] = [[-1] + list(o.size())[1:] for o in output]
+              bwd_summary[m_key]['input_grad_shape'] = [-1]             
+            if isinstance(output_grad, list):
+                bwd_summary[m_key]['output_grad_shape'] = [[-1] + list(o.size())[1:] for o in output_grad]
             else:
-                summary[m_key]['output_shape'] = list(output.size())
-                summary[m_key]['output_shape'][0] = -1
+                bwd_summary[m_key]['output_grad_shape'] = list(output_grad.size())
+                bwd_summary[m_key]['output_grad_shape'][0] = -1
 
             params = 0
             if hasattr(module, 'weight'):
                 params += torch.prod(torch.LongTensor(list(module.weight.size())))
-                summary[m_key]['trainable'] = module.weight.requires_grad
+                bwd_summary[m_key]['trainable'] = module.weight.requires_grad
             if hasattr(module, 'bias') and module.bias is not None:
                 params +=  torch.prod(torch.LongTensor(list(module.bias.size())))
-            summary[m_key]['nb_params'] = params
+            bwd_summary[m_key]['nb_params'] = params
+            save_log(m_key, bwd_summary[m_key])
 
         if (not isinstance(module, nn.Sequential) and
            not isinstance(module, nn.ModuleList) and
            not (module == m)):
-            hooks.append(module.register_forward_hook(fwd_hook))
+            hooks.append(module.register_forward_pre_hook(fwd_hook))
             hooks.append(module.register_backward_hook(bwd_hook))
 
-    fwd_summary, bwd_summary = OrderedDict(), OrderedDict()
-    hooks = []
     m.apply(register_hook)
-    m(inputs)
 
-    for h in hooks: h.remove()
-    return summary
 
 def set_seed(args):
     random.seed(args.seed)
@@ -277,6 +280,7 @@ def train(args, train_dataset, model, tokenizer):
 
             meter.forward_start()
             outputs = model(**inputs)
+            fwd_summary, bwd_summary = OrderedDict(), OrderedDict()
             meter.forward_stop()
 
             if args.one_iter and args.no_bwd: raise CancelBWDException
@@ -759,6 +763,7 @@ def main():
     parser.add_argument("--no_optim", action="store_true", help="only fwd+bwd")
     parser.add_argument("--warm_up", action="store_true", help="warm up GPU")
     parser.add_argument("--result_dir", type=str, default="", help="output dir for profile results")
+    parser.add_argument("--layer_log_path", type=str, default=None, help="layer log hook")
     args = parser.parse_args()
 
     if args.doc_stride >= args.max_seq_length - args.max_query_length:
@@ -839,6 +844,12 @@ def main():
         config=config,
         cache_dir=args.cache_dir if args.cache_dir else None,
     )
+
+    global log_fp
+    if args.layer_log_path != None:
+        log_fp = args.layer_log_path
+
+    model_summary(model)
 
     if args.local_rank == 0:
         # Make sure only the first process in distributed training will download model & vocab
