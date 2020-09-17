@@ -86,7 +86,7 @@ def model_summary(m):
             m_key = '%s-%i.%s' % (class_name, module_idx+1, 'fwd')
             fwd_summary[m_key] = OrderedDict()
             if len(input) > 0:
-                fwd_summary[m_key]['input'] = list(input[0].size())
+                fwd_summary[m_key]['input'] = [list(o.size()) for o in input if o is not None]
             else:
                 fwd_summary[m_key]['input'] = [-1]
 
@@ -94,7 +94,6 @@ def model_summary(m):
             if hasattr(module, 'weight'):
                 fwd_summary[m_key]['weight'] = list(module.weight.size())
                 params += torch.prod(torch.LongTensor(list(module.weight.size())))
-                fwd_summary[m_key]['trainable'] = module.weight.requires_grad
             if hasattr(module, 'bias') and module.bias is not None:
                 fwd_summary[m_key]['bias'] = list(module.bias.size())
                 params +=  torch.prod(torch.LongTensor(list(module.bias.size())))
@@ -102,27 +101,26 @@ def model_summary(m):
             save_log(m_key, fwd_summary[m_key])
 
         def bwd_hook(module, input_grad, output_grad):
-            import pdb; pdb.set_trace()
+#            import pdb; pdb.set_trace()
             class_name = str(module.__class__).split('.')[-1].split("'")[0]
             module_idx = len(bwd_summary)
             m_key = '%s-%i.%s' % (class_name, module_idx+1, 'bwd')
             bwd_summary[m_key] = OrderedDict()
             if len(input_grad) > 0:
-              bwd_summary[m_key]['input_grad_shape'] = list(input_grad[0].size())
-              bwd_summary[m_key]['input_grad_shape'][0] = -1
+                bwd_summary[m_key]['input_grad'] = [list(o.size()) for o in input_grad if o is not None]
             else:
-              bwd_summary[m_key]['input_grad_shape'] = [-1]             
-            if isinstance(output_grad, list):
-                bwd_summary[m_key]['output_grad_shape'] = [[-1] + list(o.size())[1:] for o in output_grad]
-            else:
-                bwd_summary[m_key]['output_grad_shape'] = list(output_grad.size())
-                bwd_summary[m_key]['output_grad_shape'][0] = -1
+                bwd_summary[m_key]['input_grad'] = [-1]             
+            if isinstance(output_grad, (list, tuple)):
+                bwd_summary[m_key]['output_grad'] = [list(o.size()) for o in output_grad if o is not None]
+            elif output_grad is not None:
+                bwd_summary[m_key]['output_grad'] = list(output_grad.size())
 
             params = 0
             if hasattr(module, 'weight'):
+                bwd_summary[m_key]['weight'] = list(module.weight.size())
                 params += torch.prod(torch.LongTensor(list(module.weight.size())))
-                bwd_summary[m_key]['trainable'] = module.weight.requires_grad
             if hasattr(module, 'bias') and module.bias is not None:
+                bwd_summary[m_key]['bias'] = list(module.bias.size())
                 params +=  torch.prod(torch.LongTensor(list(module.bias.size())))
             bwd_summary[m_key]['nb_params'] = params
             save_log(m_key, bwd_summary[m_key])
